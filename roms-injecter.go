@@ -18,12 +18,20 @@ import (
 //go:embed OVMF_VARS.fd
 var ovmfVars []byte
 
+//go:embed OVMF_VARS.secboot.fd
+var ovmfVarsSecBoot []byte
+
 //go:embed OVMF_CODE.fd
 var ovmfCode []byte
 
+//go:embed OVMF_CODE.secboot.fd
+var ovmfCodeSecBoot []byte
+
 const (
-	ovmfVarsPath = "/var/run/kubevirt-hooks/OVMF_VARS.fd"
-	ovmfCodePath = "/var/run/kubevirt-hooks/OVMF_CODE.fd"
+	ovmfVarsPath        = "/var/run/kubevirt-hooks/OVMF_VARS.fd"
+	ovmfCodePath        = "/var/run/kubevirt-hooks/OVMF_CODE.fd"
+	ovmfVarsSecBootPath = "/var/run/kubevirt-hooks/OVMF_VARS.secboot.fd"
+	ovmfCodeSecBootPath = "/var/run/kubevirt-hooks/OVMF_CODE.secboot.fd"
 )
 
 func copyFiles() error {
@@ -31,6 +39,12 @@ func copyFiles() error {
 		return err
 	}
 	if err := os.WriteFile(ovmfCodePath, ovmfCode, 0666); err != nil {
+		return err
+	}
+	if err := os.WriteFile(ovmfVarsSecBootPath, ovmfVarsSecBoot, 0666); err != nil {
+		return err
+	}
+	if err := os.WriteFile(ovmfCodeSecBootPath, ovmfCodeSecBoot, 0666); err != nil {
 		return err
 	}
 	return nil
@@ -47,8 +61,20 @@ func onDefineDomain(vmiJSON, domainXML []byte) (string, error) {
 		return "", err
 	}
 
-	domainSpec.OS.NVRam.Template = ovmfVarsPath
-	domainSpec.OS.BootLoader.Path = ovmfCodePath
+	fw := vmiSpec.Spec.Domain.Firmware
+	if fw != nil &&
+		fw.Bootloader != nil &&
+		fw.Bootloader.EFI != nil &&
+		fw.Bootloader.EFI.SecureBoot != nil &&
+		*fw.Bootloader.EFI.SecureBoot {
+		domainSpec.OS.NVRam.Template = ovmfVarsSecBootPath
+		domainSpec.OS.BootLoader.Path = ovmfCodeSecBootPath
+	} else if fw != nil &&
+		fw.Bootloader != nil &&
+		fw.Bootloader.EFI != nil {
+		domainSpec.OS.NVRam.Template = ovmfVarsPath
+		domainSpec.OS.BootLoader.Path = ovmfCodePath
+	}
 
 	newDomainXML, err := xml.Marshal(domainSpec)
 	if err != nil {
